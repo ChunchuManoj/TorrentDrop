@@ -2,140 +2,184 @@ import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const formatBytes = (bytes) => {
+const browserTrackers = [
+  "wss://tracker.openwebtorrent.com",
+  "wss://tracker.webtorrent.dev",
+];
+
+const formatBytes = (bytes = 0) => {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
 };
 
-const formatSpeed = (bytes) => `${formatBytes(bytes)}/s`;
+const addBrowserTrackers = (magnet) => browserTrackers.reduce((value, tracker) => (
+  value.includes(encodeURIComponent(tracker)) ? value : `${value}&tr=${encodeURIComponent(tracker)}`
+), magnet);
 
-function Icon({ name, size = 20 }) {
-  const paths = {
-    arrow: <><path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></>,
-    link: <><path d="M10 13a5 5 0 0 0 7.07.07l1.5-1.5a5 5 0 0 0-7.07-7.07l-.86.86" /><path d="M14 11a5 5 0 0 0-7.07-.07l-1.5 1.5a5 5 0 0 0 7.07 7.07l.86-.86" /></>,
-    check: <path d="m5 12 4 4L19 6" />,
-    x: <><path d="m6 6 12 12" /><path d="m18 6-12 12" /></>,
-    film: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M7 3v18M17 3v18M3 7h4M17 7h4M3 17h4M17 17h4M3 12h18" /></>,
-    bolt: <path d="m13 2-9 12h7l-1 8 9-12h-7z" />,
-    shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />,
-    info: <><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></>,
-  };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+function Icon({ children, size = 19 }) {
+  return <span className="material-symbols-rounded" style={{ fontSize: size }}>{children}</span>;
 }
 
 function App() {
-  const pollRef = useRef(null);
+  const clientRef = useRef(null);
+  const torrentRef = useRef(null);
   const [magnet, setMagnet] = useState("");
   const [torrent, setTorrent] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(0);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
-  const [downloaded, setDownloaded] = useState(0);
   const [speed, setSpeed] = useState(0);
-  const [file, setFile] = useState(null);
+  const [downloaded, setDownloaded] = useState(0);
 
-  useEffect(() => () => window.clearInterval(pollRef.current), []);
+  useEffect(() => () => {
+    torrentRef.current?.destroy();
+    clientRef.current?.destroy();
+  }, []);
 
-  const reset = () => {
-    window.clearInterval(pollRef.current);
+  const clearDownload = () => {
+    torrentRef.current?.destroy();
+    torrentRef.current = null;
     setTorrent(null);
-    setFile(null);
+    setFiles([]);
     setProgress(0);
-    setDownloaded(0);
     setSpeed(0);
-    setError("");
+    setDownloaded(0);
     setStatus("idle");
+    setError("");
   };
 
   const startDownload = async () => {
-    const value = magnet.trim();
-    if (!value.startsWith("magnet:?")) {
-      setError("Paste a valid magnet link to continue.");
+    if (!magnet.trim().startsWith("magnet:?")) {
+      setError("Paste a valid magnet link.");
       return;
     }
-    reset();
+    clearDownload();
     setStatus("connecting");
     try {
-      const response = await fetch("/api/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ magnet: value }),
+      const { default: WebTorrent } = await import("webtorrent/dist/webtorrent.min.js");
+      clientRef.current ||= new WebTorrent();
+      const torrent = clientRef.current.add(addBrowserTrackers(magnet.trim()));
+      torrentRef.current = torrent;
+      torrent.on("metadata", () => {
+        setTorrent(torrent);
+        setFiles([...torrent.files]);
+        setSelectedFile(0);
+        setStatus("ready");
       });
-      const job = await response.json();
-      if (!response.ok) throw new Error(job.error || "The download could not be started.");
-      setTorrent(job);
-      pollRef.current = window.setInterval(async () => {
-        const updateResponse = await fetch(`/api/downloads/${job.id}`);
-        const update = await updateResponse.json();
-        if (!updateResponse.ok) return;
-        setTorrent(update);
-        setStatus(update.status);
-        setProgress(update.progress);
-        setDownloaded(update.downloaded);
-        setSpeed(update.speed);
-        setFile(update.file);
-        if (update.status === "error") {
-          setError(update.error);
-          window.clearInterval(pollRef.current);
-        }
-        if (update.status === "complete") window.clearInterval(pollRef.current);
-      }, 1000);
-    } catch (torrentError) {
-      setError(torrentError instanceof Error ? torrentError.message : "The download could not be started.");
+      torrent.on("download", () => {
+        setProgress(torrent.progress * 100);
+        setSpeed(torrent.downloadSpeed);
+        setDownloaded(torrent.downloaded);
+      });
+      torrent.on("done", () => {
+        setProgress(100);
+        setSpeed(0);
+        setDownloaded(torrent.downloaded);
+        setStatus("complete");
+      });
+      torrent.on("error", (torrentError) => {
+        setError(torrentError.message || "The torrent could not be started in this browser.");
+        setStatus("error");
+      });
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "WebTorrent could not start.");
       setStatus("error");
     }
   };
 
-  const saveFile = () => {
-    if (file?.url) window.location.href = file.url;
+  const beginSelectedDownload = () => {
+    if (!torrent || !files[selectedFile]) return;
+    setStatus("downloading");
+    files.forEach((file, index) => file.select(index === selectedFile));
   };
 
-  const isActive = status === "connecting" || status === "downloading";
-  const title = torrent?.name || "Ready for your magnet link";
-  const displayProgress = Math.min(100, Math.max(0, progress));
+  const pauseDownload = () => {
+    if (!torrent) return;
+    torrent.pause();
+    setStatus("paused");
+  };
+
+  const resumeDownload = () => {
+    if (!torrent) return;
+    setStatus("resuming");
+    torrent.resume();
+    window.setTimeout(() => setStatus("downloading"), 1500);
+  };
+
+  const saveFile = async () => {
+    const file = files[selectedFile];
+    if (!file) return;
+    try {
+      if ("showSaveFilePicker" in window) {
+        const handle = await window.showSaveFilePicker({ suggestedName: file.name });
+        const writable = await handle.createWritable();
+        const blob = await file.blob();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        const url = await new Promise((resolve, reject) => file.getBlobURL((fileError, blobUrl) => fileError ? reject(fileError) : resolve(blobUrl)));
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = file.name;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (saveError) {
+      if (saveError.name !== "AbortError") setError(`Could not save the file: ${saveError.message}`);
+    }
+  };
+
+  const isActive = ["connecting", "ready", "downloading", "resuming"].includes(status);
 
   return (
     <main className="app-shell">
       <nav className="topbar">
-        <div className="brand"><span className="brand-mark"><Icon name="bolt" size={16} /></span><span>Torrent<span className="brand-accent">Drop</span></span></div>
-        <span className="privacy"><Icon name="shield" size={15} /> Powered by local Node</span>
+        <div className="brand"><span className="brand-mark"><Icon>bolt</Icon></span> Torrent<span className="brand-accent">Drop</span></div>
+        <span className="privacy"><Icon size={15}>language</Icon> Browser P2P</span>
       </nav>
 
       <section className="hero">
-        <div className="eyebrow"><Icon name="film" size={15} /> SIMPLE MOVIE DOWNLOADS</div>
-        <h1>Drop a link.<br /><span>Get your movie.</span></h1>
-        <p className="subtitle">Paste a magnet link below and let the local Node downloader handle the transfer.</p>
-
+        <div className="eyebrow"><Icon size={15}>hub</Icon> TORRENT DOWNLOADER</div>
+        <h1>Drop a link.<br /><span>Get your file.</span></h1>
+        <p className="subtitle">Download authorized files directly from peers to your device. No server storage.</p>
         <div className="download-card">
           <label htmlFor="magnet-input">MAGNET LINK</label>
           <div className="input-row">
-            <div className="input-wrap"><Icon name="link" size={18} /><input id="magnet-input" value={magnet} onChange={(event) => { setMagnet(event.target.value); setError(""); }} onKeyDown={(event) => event.key === "Enter" && startDownload()} placeholder="magnet:?xt=urn:btih:..." disabled={isActive} /></div>
-            <button className="primary-button" onClick={startDownload} disabled={isActive || !magnet.trim()}><Icon name="arrow" size={18} /> {isActive ? "Connecting..." : "Download"}</button>
+            <div className="input-wrap"><Icon size={18}>link</Icon><input id="magnet-input" value={magnet} onChange={(event) => { setMagnet(event.target.value); setError(""); }} placeholder="magnet:?xt=urn:btih:..." disabled={isActive} /></div>
+            <button className="primary-button" onClick={startDownload} disabled={isActive || !magnet.trim()}><Icon size={18}>search</Icon> Resolve torrent</button>
           </div>
-          {error && <div className="error-message"><Icon name="info" size={16} /> {error}</div>}
-          <p className="legal-note"><Icon name="shield" size={14} /> Downloads run locally on your computer. Only use content you have permission to access.</p>
+          {error && <div className="error-message"><Icon size={16}>error</Icon>{error}</div>}
+          <p className="legal-note"><Icon size={14}>shield</Icon> Only download content you own or have permission to access.</p>
         </div>
       </section>
 
-      <section className={`progress-card ${status !== "idle" ? "visible" : ""}`}>
+      {status !== "idle" && <section className="progress-card">
         <div className="progress-header">
-          <div className="file-heading"><div className="file-icon"><Icon name={status === "complete" ? "check" : "film"} size={20} /></div><div><h2>{title}</h2><p>{status === "connecting" ? "Finding peers..." : status === "complete" ? "Download complete" : torrent ? `${formatBytes(torrent.length || 0)} · ${file?.name || "Preparing files"}` : "Your download will appear here"}</p></div></div>
-          {status === "complete" && <button className="close-button" onClick={reset} aria-label="Clear download"><Icon name="x" size={18} /></button>}
+          <div className="file-heading"><div className="file-icon"><Icon>{status === "complete" ? "check_circle" : "movie"}</Icon></div><div><h2>{torrent?.name || "Connecting to peers"}</h2><p>{status === "connecting" ? "Finding metadata and peers..." : `${files.length} file${files.length === 1 ? "" : "s"} · ${formatBytes(torrent?.length)}`}</p></div></div>
+          <button className="close-button" onClick={clearDownload} aria-label="Cancel and clear"><Icon>close</Icon></button>
         </div>
-        <div className="progress-track"><div className="progress-fill" style={{ width: `${displayProgress}%` }} /></div>
-        <div className="progress-meta"><span>{status === "connecting" ? "Connecting to peers" : status === "complete" ? "Ready to save" : `${displayProgress.toFixed(1)}% downloaded`}</span><span>{isActive ? `${formatSpeed(speed)} · ${formatBytes(downloaded)}` : status === "complete" ? "100%" : ""}</span></div>
-        {status === "complete" && <button className="save-button" onClick={saveFile}><Icon name="arrow" size={18} /> Save movie to device</button>}
-      </section>
 
-      <section className="feature-row">
-        <div><span className="feature-icon"><Icon name="bolt" size={18} /></span><div><strong>Peer-to-peer</strong><p>Fast, direct transfers</p></div></div>
-        <div><span className="feature-icon"><Icon name="shield" size={18} /></span><div><strong>Private by design</strong><p>No uploads or accounts</p></div></div>
-        <div><span className="feature-icon"><Icon name="check" size={18} /></span><div><strong>One click</strong><p>Simple file saving</p></div></div>
-      </section>
+        {(status === "ready" || status === "connecting") && files.length > 0 && <div className="file-list">
+          <label>SELECT FILE</label>
+          {files.map((file, index) => <label className="file-option" key={file.path}><input type="radio" checked={selectedFile === index} onChange={() => setSelectedFile(index)} /><span>{file.name}</span><small>{formatBytes(file.length)}</small></label>)}
+          <button className="save-button" onClick={beginSelectedDownload}><Icon>download</Icon> Start download</button>
+        </div>}
 
-      <footer>TORRENTDROP <span>·</span> USE RESPONSIBLY</footer>
+        {["downloading", "paused", "resuming", "complete"].includes(status) && <>
+          <div className="selected-name">{files[selectedFile]?.name}</div>
+          <div className="progress-track"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
+          <div className="progress-meta"><span>{status === "complete" ? "Download complete" : status === "paused" ? "Paused" : status === "resuming" ? "Resuming… please wait" : `${progress.toFixed(1)}% downloaded`}</span><span>{status === "downloading" ? `${formatBytes(speed)}/s · ${formatBytes(downloaded)}` : ""}</span></div>
+          <div className="action-row">
+            {status === "complete" ? <button className="save-button" onClick={saveFile}><Icon>save</Icon> Save to device</button> : status === "paused" ? <button className="secondary-button" onClick={resumeDownload}><Icon>play_arrow</Icon> Resume</button> : status === "resuming" ? <button className="secondary-button" disabled><Icon>sync</Icon> Resuming…</button> : <button className="secondary-button" onClick={pauseDownload}><Icon>pause</Icon> Pause</button>}
+            <button className="cancel-button" onClick={clearDownload}><Icon>cancel</Icon> Cancel</button>
+          </div>
+        </>}
+      </section>}
+      <footer>PEER-TO-PEER <span>·</span> YOUR DEVICE <span>·</span> YOUR FILE</footer>
     </main>
   );
 }
