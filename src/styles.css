@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root { font-family: "Space Grotesk", sans-serif; color: #f5f7fb; background: #0a0d13; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 50% -20%, #162130 0, #0a0d13 48%); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+.app-shell { width: min(100% - 48px, 980px); margin: auto; min-height: 100vh; display: flex; flex-direction: column; }
+.topbar { height: 86px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1c2530; }
+.brand { display: flex; align-items: center; gap: 11px; font-weight: 700; letter-spacing: -.04em; font-size: 20px; }
+.brand-mark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 9px; color: #08100e; background: #b9f47b; }
+.brand-accent { color: #b9f47b; }
+.privacy, .legal-note, footer, .eyebrow, label { font-family: "DM Mono", monospace; }
+.privacy { display: flex; align-items: center; gap: 7px; color: #8390a1; font-size: 11px; }
+.hero { text-align: center; padding: 105px 0 55px; }
+.eyebrow { color: #b9f47b; font-size: 11px; letter-spacing: .16em; display: flex; justify-content: center; align-items: center; gap: 8px; }
+h1 { margin: 20px 0 16px; font-size: clamp(45px, 7vw, 76px); line-height: .98; letter-spacing: -.065em; }
+h1 span { color: #b9f47b; }
+.subtitle { color: #909bab; font-size: 16px; margin: 0 auto; max-width: 470px; line-height: 1.6; }
+.download-card { text-align: left; margin: 48px auto 0; max-width: 760px; padding: 24px; background: rgba(19, 26, 36, .8); border: 1px solid #293442; border-radius: 15px; box-shadow: 0 18px 70px rgba(0,0,0,.2); }
+label { display: block; color: #8c99aa; font-size: 10px; letter-spacing: .16em; margin-bottom: 10px; }
+.input-row { display: flex; gap: 10px; }
+.input-wrap { flex: 1; display: flex; align-items: center; gap: 10px; padding: 0 15px; background: #0c1118; border: 1px solid #303d4b; border-radius: 9px; color: #788798; }
+input { color: #f5f7fb; background: transparent; border: 0; outline: 0; width: 100%; padding: 15px 0; font-size: 14px; }
+input::placeholder { color: #566273; }
+.primary-button, .save-button { border: 0; border-radius: 9px; background: #b9f47b; color: #11190f; font-weight: 700; padding: 0 22px; display: inline-flex; gap: 9px; align-items: center; justify-content: center; transition: transform .15s, background .15s; }
+.primary-button:hover:not(:disabled), .save-button:hover { transform: translateY(-2px); background: #cafb98; }
+.primary-button:disabled { opacity: .45; cursor: not-allowed; }
+.legal-note { display: flex; align-items: center; gap: 7px; color: #667385; font-size: 10px; margin: 16px 0 0; }
+.error-message { display: flex; align-items: center; gap: 7px; color: #ff9b9b; margin-top: 14px; font-size: 12px; }
+.progress-card { display: none; max-width: 760px; width: 100%; margin: 0 auto 42px; padding: 22px 24px; border: 1px solid #293442; border-radius: 15px; background: #111821; }
+.progress-card.visible { display: block; }
+.progress-header, .file-heading, .progress-meta { display: flex; align-items: center; justify-content: space-between; }
+.file-heading { justify-content: flex-start; gap: 12px; min-width: 0; flex: 1; overflow: hidden; }
+.file-heading > div:last-child { min-width: 0; flex: 1; overflow: hidden; }
+.file-icon { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: 10px; background: #1d2b29; color: #b9f47b; }
+h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; margin: 0 0 5px; }
+.file-heading p { color: #788697; margin: 0; font: 10px "DM Mono", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 560px; }
+.close-button { color: #758292; border: 0; background: transparent; padding: 5px; }
+.progress-track { height: 6px; background: #25303b; border-radius: 8px; margin-top: 23px; overflow: hidden; }
+.progress-fill { height: 100%; background: #b9f47b; border-radius: inherit; transition: width .3s; }
+.progress-meta { color: #8895a4; font: 10px "DM Mono", monospace; margin-top: 10px; }
+.save-button { margin-top: 18px; min-height: 42px; }
+.feature-row { display: flex; gap: 55px; justify-content: center; margin: auto 0 85px; padding-top: 38px; border-top: 1px solid #1c2530; }
+.feature-row > div { display: flex; align-items: center; gap: 12px; }
+.feature-icon { color: #b9f47b; }
+.feature-row strong { font-size: 12px; }
+.feature-row p { color: #697688; font-size: 11px; margin: 4px 0 0; }
+footer { color: #475463; font-size: 9px; letter-spacing: .18em; text-align: center; padding-bottom: 28px; }
+footer span { color: #b9f47b; margin: 0 8px; }
+@media (max-width: 650px) { .app-shell { width: min(100% - 32px, 980px); } .topbar { height: 72px; } .privacy { font-size: 0; } .privacy svg { width: 17px; height: 17px; } .hero { padding: 78px 0 38px; } .input-row { flex-direction: column; } .primary-button { height: 50px; } .download-card, .progress-card { padding: 18px; } .feature-row { gap: 20px; justify-content: space-between; } .feature-row > div { display: block; text-align: center; } .feature-icon { display: block; margin-bottom: 8px; } .feature-row p { display: none; } .file-heading p { max-width: 100%; } }
